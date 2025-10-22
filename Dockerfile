@@ -13,15 +13,22 @@ RUN mvn clean package -DskipTests
 # -----------------------------------------------------------------------------------
 
 # Stage 2: Runtime stage
-# Sử dụng JRE/JDK cơ bản làm môi trường chạy
-FROM openjdk:17-jdk-slim
+# SỬ DỤNG IMAGE TEMURIN DỰA TRÊN UBUNTU ĐỂ ĐẢM BẢO VIỆC CÀI ĐẶT CHROMIUM/SELENIUM THÀNH CÔNG
+FROM eclipse-temurin:17-jre-focal
 
 # CÀI ĐẶT CHROMIUM VÀ DEPENDENCIES CHO SELENIUM
-# openjdk:17-jdk-slim dựa trên Debian/Ubuntu nên ta dùng apt-get
+# Lệnh cài đặt chromium-browser/dependencies trên Ubuntu/Debian
 RUN apt-get update && apt-get install -y \
     chromium-browser \
     wget \
     curl \
+    # Thêm libgconf-2-4 và các dependencies khác thường gặp cho môi trường headless
+    libgconf-2-4 \
+    libnss3 \
+    libfontconfig1 \
+    libxcomposite1 \
+    libxrandr2 \
+    libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
