@@ -1,0 +1,4 @@
+com\example\fccrawler\controller\CrawlController.class
+com\example\fccrawler\model\RedeemCode.class
+com\example\fccrawler\FcCrawlerApplication.class
+com\example\fccrawler\service\CrawlerService.class
