@@ -93,12 +93,11 @@ public class CrawlerService {
             driver = new ChromeDriver(options);
             driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(30));
 
-            System.out.println("📄 Truy cập: " + url);
+            System.out.println("Acess: " + url);
             driver.get(url);
             Thread.sleep(2000);
 
-            // Hiện tất cả element ẩn
-            System.out.println("🔍 Hiển thị code ẩn...");
+
             ((JavascriptExecutor) driver).executeScript(
                 "document.querySelectorAll('*').forEach(el => {" +
                 "  el.style.display = 'block';" +
@@ -110,7 +109,7 @@ public class CrawlerService {
             Thread.sleep(1000);
 
             // Scroll
-            System.out.println("📜 Scrolling...");
+            System.out.println("Scrolling...");
             for (int i = 0; i < 5; i++) {
                 ((JavascriptExecutor) driver).executeScript("window.scrollBy(0, window.innerHeight);");
                 Thread.sleep(500);
@@ -123,13 +122,13 @@ public class CrawlerService {
             
             List<RedeemCode> codes = extractCodesWithDetails(doc);
             
-            System.out.println("✅ Tìm được " + codes.size() + " codes");
+            System.out.println("find " + codes.size() + " codes");
             codes.forEach(c -> System.out.println("  " + c.getCode() + " | " + c.getReward() + " | " + c.getDate()));
             
             return codes;
 
         } catch (Exception e) {
-            System.err.println("❌ Lỗi: " + e.getMessage());
+            System.err.println("error: " + e.getMessage());
             e.printStackTrace();
             return new ArrayList<>();
         } finally {
@@ -146,7 +145,7 @@ public class CrawlerService {
         List<RedeemCode> results = new ArrayList<>();
         Map<String, RedeemCode> codeMap = new LinkedHashMap<>();
 
-        System.out.println("🔎 Parsing code blocks...");
+        System.out.println("Parsing code blocks...");
 
         Elements blocks = doc.select("*");
         
@@ -186,9 +185,9 @@ public class CrawlerService {
             RedeemCode rc = new RedeemCode(code, reward, date, status, null);
             codeMap.put(code, rc);
             
-            System.out.println("\n📌 " + code);
-            System.out.println("   Reward: " + reward);
-            System.out.println("   Date: " + date);
+            System.out.println("Code: " + code);
+            System.out.println("Reward: " + reward);
+            System.out.println("Date: " + date);
         }
 
         // Sort by date (mới nhất trước)

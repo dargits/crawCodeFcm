@@ -4,7 +4,7 @@
     <groupId>com.example</groupId>
     <artifactId>fc-crawler</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <packaging>jar</packaging>
+    <packaging>war</packaging>
 
     <name>fc-crawler</name>
     <description>Crawler for FC Mobile redeem codes</description>
