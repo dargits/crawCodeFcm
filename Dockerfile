@@ -40,23 +40,3 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Lệnh chạy ứng dụng
 ENTRYPOINT ["java", "-jar", "fc-crawler.jar"]
-```
-eof
-
----
-
-### Lưu ý quan trọng cho việc triển khai trên Render
-
-Vì bạn đang dùng Selenium và Chromium trong môi trường container không có giao diện (headless) trên Render, bạn **phải** cấu hình code Spring Boot (Java) của mình để thêm các `ChromeOptions` sau:
-
-```java
-// Ví dụ cấu hình trong code Java của bạn
-ChromeOptions options = new ChromeOptions();
-
-// Bắt buộc phải thêm các đối số sau để chạy trong container
-options.addArguments("--headless");
-options.addArguments("--no-sandbox"); // Cần thiết trong môi trường container
-options.addArguments("--disable-dev-shm-usage"); // Cần thiết để tránh lỗi bộ nhớ trong container
-
-// ... Khởi tạo ChromeDriver với các options này
-// WebDriver driver = new ChromeDriver(options);
