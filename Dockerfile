@@ -8,6 +8,7 @@ WORKDIR /app
 COPY . .
 
 # FIX: Thêm -Dfile.encoding=UTF-8 để khắc phục lỗi biên dịch ký tự đặc biệt
+# Lệnh này sẽ tạo ra file JAR, giả định <packaging> trong pom.xml là jar.
 RUN mvn clean package -DskipTests -Dfile.encoding=UTF-8
 
 # -----------------------------------------------------------------------------------
@@ -32,9 +33,9 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy file WAR từ stage build và đổi tên thành app.war
-# Tên file chính xác từ thư mục target: fc-crawler-0.0.1-SNAPSHOT.war
-COPY --from=build /app/target/fc-crawler-0.0.1-SNAPSHOT.war app.war
+# Copy file JAR từ stage build và đổi tên thành app.jar
+# CHUYỂN TỪ .WAR SANG .JAR: Giả định file đầu ra là fc-crawler-0.0.1-SNAPSHOT.jar
+COPY --from=build /app/target/fc-crawler-0.0.1-SNAPSHOT.jar app.jar
 
 # Expose port mặc định của ứng dụng Spring Boot
 EXPOSE 8080
@@ -44,5 +45,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8080/api/crawl/codes || exit 1
 
 # Lệnh chạy ứng dụng
-# LƯU Ý: Lệnh 'java -jar' vẫn hoạt động nếu WAR của bạn là executable (có Tomcat nhúng).
-ENTRYPOINT ["java", "-jar", "app.war"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
