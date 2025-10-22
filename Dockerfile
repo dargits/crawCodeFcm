@@ -1,15 +1,35 @@
-# Multi-stage Dockerfile for Spring Boot app with headless Chromium
-FROM maven:3.9.4-eclipse-temurin-17 as build
-WORKDIR /build
-COPY pom.xml ./
+# Build stage
+FROM maven:3.9-eclipse-temurin-21 AS builder
+
+WORKDIR /app
+
+COPY pom.xml .
+RUN mvn dependency:go-offline
+
 COPY src ./src
-RUN mvn -B -DskipTests package
+RUN mvn clean package -DskipTests
 
-FROM eclipse-temurin:17-jre-alpine
-# Install necessary packages for Chromium
-RUN apk add --no-cache chromium nss freetype ttf-freefont
+# Runtime stage
+FROM eclipse-temurin:21-jre
 
-COPY --from=build /build/target/fc-crawler-0.0.1-SNAPSHOT.jar /app/fc-crawler.jar
-ENV JAVA_OPTS=""
+# Install Chrome và dependencies cho Selenium
+RUN apt-get update && apt-get install -y \
+    chromium-browser \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy JAR từ build stage
+COPY --from=builder /app/target/*.jar app.jar
+
+# Expose port
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/fc-crawler.jar"]
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8080/api/crawl/codes || exit 1
+
+# Run application
+ENTRYPOINT ["java", "-jar", "app.jar"]
