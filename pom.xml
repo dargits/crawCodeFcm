@@ -79,7 +79,15 @@
                 <version>${spring.boot.version}</version>
                 <configuration>
                     <executable>true</executable>
+                    <mainClass>com.example.fccrawler.FcCrawlerApplication</mainClass>
                 </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
