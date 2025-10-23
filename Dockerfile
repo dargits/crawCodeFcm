@@ -1,48 +1,52 @@
-# Stage 1: Build stage
-# Sử dụng image có sẵn Maven và JDK để build (đã fix lỗi 'mvn' not found)
-FROM maven:3-openjdk-17 AS build 
+# Build stage
+FROM maven:3.9-eclipse-temurin-17 AS builder
 
 WORKDIR /app
 
-# Copy toàn bộ dự án vào thư mục làm việc
-COPY . .
+# Copy pom.xml
+COPY pom.xml .
 
-# FIX: Thêm -Dfile.encoding=UTF-8 để khắc phục lỗi biên dịch ký tự đặc biệt
-# Lệnh này sẽ tạo ra file JAR, giả định <packaging> trong pom.xml là jar.
-RUN mvn clean package -DskipTests -Dfile.encoding=UTF-8
+# Download dependencies
+RUN mvn dependency:go-offline -B
 
-# -----------------------------------------------------------------------------------
+# Copy source code
+COPY src ./src
 
-# Stage 2: Runtime stage
-# SỬ DỤNG IMAGE TEMURIN DỰA TRÊN UBUNTU ĐỂ CÀI ĐẶT CHROMIUM/SELENIUM
-FROM eclipse-temurin:17-jre-focal
+# Build project
+RUN mvn clean package -DskipTests -q
 
-# CÀI ĐẶT CHROMIUM VÀ DEPENDENCIES CHO SELENIUM
+# Runtime stage
+FROM eclipse-temurin:17-jdk-jammy
+
+WORKDIR /app
+
+# Install Chrome for Selenium (required for web scraping)
 RUN apt-get update && apt-get install -y \
-    chromium-browser \
     wget \
-    curl \
-    # Thêm các thư viện cần thiết cho môi trường headless
-    libgconf-2-4 \
-    libnss3 \
-    libfontconfig1 \
-    libxcomposite1 \
-    libxrandr2 \
-    libasound2 \
-    && rm -rf /var/lib/apt/lists/*
+    gnupg \
+    unzip \
+    ca-certificates \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list' \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/*
 
-WORKDIR /app
+# Copy compiled JAR from builder stage
+COPY --from=builder /app/target/fc-crawler-0.0.1-SNAPSHOT.jar /app/app.jar
 
-# Copy file JAR từ stage build và đổi tên thành app.jar
-# CHUYỂN TỪ .WAR SANG .JAR: Giả định file đầu ra là fc-crawler-0.0.1-SNAPSHOT.jar
-COPY --from=build /app/target/fc-crawler-0.0.1-SNAPSHOT.jar app.jar
+# Environment variables
+ENV PORT=10000 \
+    JAVA_OPTS="-Xmx512m -Xms256m" \
+    CHROMEDRIVER_SKIP_DOWNLOAD=true \
+    WDM_CHROMEDRIVER_DOWNLOAD_FALLBACK=true
 
-# Expose port mặc định của ứng dụng Spring Boot
-EXPOSE 8080
+EXPOSE $PORT
 
-# (Tùy chọn) Health Check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080/api/crawl/codes || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:$PORT/api/crawl || exit 1
 
-# Lệnh chạy ứng dụng
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Run Spring Boot application
+CMD exec java $JAVA_OPTS -jar /app/app.jar --server.port=$PORT
