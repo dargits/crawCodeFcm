@@ -4,10 +4,6 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import org.openqa.selenium.*;
-import org.openqa.selenium.chrome.ChromeDriver;
-import org.openqa.selenium.chrome.ChromeOptions;
-import io.github.bonigarcia.wdm.WebDriverManager;
 import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -43,14 +39,12 @@ public class CrawlerService {
         "ANNIVERSARY", "LIMITED", "ITEM", "ITEMS", "CARD", "CARDS", "ACTIVE",
         "EXPIRED", "CODE", "CODES", "REDEEM", "ICON", "ICONS", "COPY", "DATE",
         "STATUS", "OVR", "RANK", "POINTS", "BUTTON", "HOME", "MORE", "CLOSE",
-        // Common junk words
         "MOBILE", "LALIGA", "LEGENDS", "HALL", "SUCH", "HELPING", "GAMEPLAY",
         "DREAM", "TEAM", "BUILD", "MORE", "AND", "YOUR", "YOU", "ELEVATE",
         "WELCOME", "LATEST", "UPDATED", "MOST", "SPORTS", "OFFICIAL", "PARTNERS",
         "EXCLUSIVE", "REWARDS", "UNLOCK", "ELEVATE", "PACKS", "COINS", "GEMS",
         "IZTPZ8", "COMPARE", "CALCULATOR", "INVESTMENT", "TRAINING", "REVIEWS",
         "PROFILE", "HERE", "ABOUT", "CONTACT", "POLICY", "PRIVACY", "TERMS",
-        // Expired/old codes - không phải JS hidden
         "NEWYEARNEWPACK", "HOLIDAYCHEER", "HOLIDAYGIFT", "THUNDERGIFT",
         "THEFANSTEAM", "THWINFCPRO", "OS11MELHORES", "REDENVELOPE", "ULTIMATEXI",
         "FRAGMENTOS", "TOTY25", "REDHEARTS", "SAMBA", "BRASILSILSIL", "RAMADANKAREEM",
@@ -67,80 +61,43 @@ public class CrawlerService {
         "FCMBGS", "100KSEGUIDORESIG", "FC25CLUBHOUSE", "100KSEGUIDORESWA", "CEMPASUCHILYVELAS",
         "HALLOWEEN24", "DIADASBRUXAS", "TRICKORTREAT", "LIVELIBERTADORES", "FANZONE",
         "CLUBCLASH2024", "BALLONDORBR", "NOMINATE", "GRANDEFINAL", "SPS1", "FCPROFEST",
-        // Partial/fragment codes
         "SXMHR2S", "SPBIMPW", "S__1KYOTA", "XKIJON", "HTN5RD", "ZPDMV1",
         "USMXR", "RTI1N", "AUTO", "YN8YY", "GP1LT"
     ));
 
+    private static final int MAX_RETRIES = 3;
+    private static final int TIMEOUT_SECONDS = 15;
+
     public List<RedeemCode> fetchCodes(String url) {
-        WebDriver driver = null;
-        try {
-            System.out.println("🔄 Khởi động Selenium...");
-            
-            WebDriverManager.chromedriver().setup();
-            ChromeOptions options = new ChromeOptions();
-            options.addArguments(
-                "--headless=new",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--disable-blink-features=AutomationControlled",
-                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            );
-            options.setExperimentalOption("excludeSwitches", new String[]{"enable-automation"});
-            options.setExperimentalOption("useAutomationExtension", false);
-
-            driver = new ChromeDriver(options);
-            driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(30));
-
-            System.out.println("Acess: " + url);
-            driver.get(url);
-            Thread.sleep(2000);
-
-
-            ((JavascriptExecutor) driver).executeScript(
-                "document.querySelectorAll('*').forEach(el => {" +
-                "  el.style.display = 'block';" +
-                "  el.style.visibility = 'visible';" +
-                "  el.style.opacity = '1';" +
-                "});"
-            );
-            
-            Thread.sleep(1000);
-
-            // Scroll
-            System.out.println("Scrolling...");
-            for (int i = 0; i < 5; i++) {
-                ((JavascriptExecutor) driver).executeScript("window.scrollBy(0, window.innerHeight);");
-                Thread.sleep(500);
-            }
-
-            Thread.sleep(1000);
-
-            String pageSource = driver.getPageSource();
-            Document doc = Jsoup.parse(pageSource);
-            
-            List<RedeemCode> codes = extractCodesWithDetails(doc);
-            
-            System.out.println("find " + codes.size() + " codes");
-            codes.forEach(c -> System.out.println("  " + c.getCode() + " | " + c.getReward() + " | " + c.getDate()));
-            
-            return codes;
-
-        } catch (Exception e) {
-            System.err.println("error: " + e.getMessage());
-            e.printStackTrace();
-            return new ArrayList<>();
-        } finally {
-            if (driver != null) {
-                try { driver.quit(); } catch (Exception ignored) {}
+        System.out.println("Fetching codes from: " + url);
+        
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                System.out.println("Attempt " + attempt + " of " + MAX_RETRIES);
+                
+                Document doc = Jsoup.connect(url)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .timeout(TIMEOUT_SECONDS * 1000)
+                    .get();
+                
+                List<RedeemCode> codes = extractCodesWithDetails(doc);
+                System.out.println("Successfully fetched " + codes.size() + " codes");
+                return codes;
+                
+            } catch (Exception e) {
+                System.err.println("Attempt " + attempt + " failed: " + e.getMessage());
+                if (attempt < MAX_RETRIES) {
+                    try {
+                        Thread.sleep(2000); // Wait 2 seconds before retry
+                    } catch (InterruptedException ignored) {}
+                }
             }
         }
+        
+        System.err.println("Failed to fetch codes after " + MAX_RETRIES + " attempts");
+        return new ArrayList<>();
     }
 
-    /**
-     * Extract code với reward + date + status
-     */
     private List<RedeemCode> extractCodesWithDetails(Document doc) {
         List<RedeemCode> results = new ArrayList<>();
         Map<String, RedeemCode> codeMap = new LinkedHashMap<>();
@@ -152,51 +109,40 @@ public class CrawlerService {
         for (Element block : blocks) {
             String blockText = block.text();
             
-            // Filter: chỉ xem block có reward/pack
             if (!blockText.toLowerCase().contains("reward") && 
                 !blockText.toLowerCase().contains("pack")) {
                 continue;
             }
 
-            // Skip expired
             if (blockText.toLowerCase().contains("expired")) {
                 continue;
             }
 
-            // Extract code từ block
             String code = extractCode(block);
             if (code == null || !isValidCode(code)) {
                 continue;
             }
 
-            // Skip nếu đã có
             if (codeMap.containsKey(code)) {
                 continue;
             }
 
-            // Extract reward
             String reward = extractReward(block, code);
-
-            // Extract date
             String date = extractDate(block);
-
             String status = "Active";
 
             RedeemCode rc = new RedeemCode(code, reward, date, status, null);
             codeMap.put(code, rc);
             
-            System.out.println("Code: " + code);
-            System.out.println("Reward: " + reward);
-            System.out.println("Date: " + date);
+            System.out.println("Code: " + code + " | Reward: " + reward + " | Date: " + date);
         }
 
-        // Sort by date (mới nhất trước)
         results = codeMap.values().stream()
                 .sorted((a, b) -> {
                     LocalDate dateA = parseDate(a.getDate());
                     LocalDate dateB = parseDate(b.getDate());
                     if (dateA != null && dateB != null) {
-                        return dateB.compareTo(dateA); // Descending
+                        return dateB.compareTo(dateA);
                     }
                     return 0;
                 })
@@ -205,13 +151,9 @@ public class CrawlerService {
         return results;
     }
 
-    /**
-     * Extract code từ element
-     */
     private String extractCode(Element block) {
         String html = block.html();
         
-        // Cách 1: Quoted code
         Pattern quotedPattern = Pattern.compile("[\"']\\s*([A-Z0-9]{6,20})\\s*[\"']");
         Matcher quotedMatcher = quotedPattern.matcher(html);
         if (quotedMatcher.find()) {
@@ -219,7 +161,6 @@ public class CrawlerService {
             if (isValidCode(code)) return code;
         }
 
-        // Cách 2: ownText
         String ownText = block.ownText();
         if (ownText != null && !ownText.isBlank()) {
             Pattern codePattern = Pattern.compile("\\b([A-Z0-9]{6,20})\\b");
@@ -230,7 +171,6 @@ public class CrawlerService {
             }
         }
 
-        // Cách 3: Tìm trong children
         for (Element child : block.children()) {
             String code = extractCode(child);
             if (code != null) return code;
@@ -239,44 +179,35 @@ public class CrawlerService {
         return null;
     }
 
-    /**
-     * Extract reward (text sau "Reward:")
-     */
     private String extractReward(Element block, String code) {
         String text = block.text();
         
-        // Tìm "Reward:" hoặc "Rewards:"
         int rewardIdx = text.toLowerCase().indexOf("reward");
         if (rewardIdx < 0) return null;
 
-        // Tìm dấu ":" sau "Reward"
         int colonIdx = text.indexOf(":", rewardIdx);
         if (colonIdx < 0) colonIdx = rewardIdx + 6;
         
         int startIdx = colonIdx + 1;
         int endIdx = text.length();
 
-        // Tìm date pattern (ví dụ: "22nd October", "20th October")
         String remaining = text.substring(startIdx);
         Matcher dateMatcher = DATE_PATTERN.matcher(remaining);
         if (dateMatcher.find()) {
             endIdx = startIdx + dateMatcher.start();
         }
 
-        // Tìm code (ví dụ: "PARALLELPITCHES", "BRIGHTLIGHTS")
         int codeIdx = text.indexOf(code, startIdx);
         if (codeIdx > startIdx && codeIdx < endIdx) {
             endIdx = codeIdx;
         }
 
-        // Extract substring
         if (startIdx >= text.length()) return null;
         
         String reward = text.substring(startIdx, Math.min(endIdx, text.length())).trim();
         
-        // Clean up
-        reward = reward.replaceAll("^[:\\s]+", "")  // Remove leading colons/spaces
-                       .replaceAll("\\s+", " ")      // Normalize spaces
+        reward = reward.replaceAll("^[:\\s]+", "")
+                       .replaceAll("\\s+", " ")
                        .trim();
 
         if (reward.isEmpty() || reward.length() > 150) return null;
@@ -284,16 +215,8 @@ public class CrawlerService {
         return reward;
     }
 
-    /**
-     * Extract date (format: "22nd October", "22 Oct", "20th October", etc)
-     */
     private String extractDate(Element block) {
         String text = block.text();
-        
-        // Pattern: "22nd October", "20th October", "22 Oct", etc
-        // Tìm date pattern sau "Reward: xxx"
-        
-        // Xóa phần trước "Reward:" để tránh extract sai
         int rewardIdx = text.toLowerCase().indexOf("reward");
         String afterReward = rewardIdx >= 0 ? text.substring(rewardIdx) : text;
         
@@ -305,22 +228,17 @@ public class CrawlerService {
         return null;
     }
 
-    /**
-     * Parse date string to LocalDate (current year assumed)
-     */
     private LocalDate parseDate(String dateStr) {
         if (dateStr == null || dateStr.isBlank()) return null;
 
         try {
-            // Remove ordinal suffix
             String clean = dateStr.replaceAll("(?:st|nd|rd|th)", "");
 
-            // Parse with different formats
             String[] patterns = {
-                "d MMMM",      // "22 October"
-                "d MMM",       // "22 Oct"
-                "dd MMMM",     // "22 October"
-                "dd MMM"       // "22 Oct"
+                "d MMMM",
+                "d MMM",
+                "dd MMMM",
+                "dd MMM"
             };
 
             int currentYear = LocalDate.now().getYear();
@@ -340,14 +258,6 @@ public class CrawlerService {
         return null;
     }
 
-    /**
-     * Check if token is valid code
-     * - Must be 6-20 chars
-     * - Only uppercase + digits
-     * - At least 2 letters
-     * - Not in blocklist
-     * - Not single/double letter codes (like "A", "AB")
-     */
     private boolean isValidCode(String code) {
         if (code == null || code.isBlank()) return false;
         if (code.length() < 6 || code.length() > 20) return false;
@@ -358,10 +268,7 @@ public class CrawlerService {
         long letterCount = code.chars().filter(Character::isLetter).count();
         if (letterCount < 2) return false;
         
-        // Reject if too many vowels in a row (likely not a code)
         if (code.matches(".*[AEIOU]{3,}.*")) return false;
-        
-        // Reject if starts with single letters that are common words
         if (code.matches("^[A-H]\\d{5,}.*")) return false;
         
         return true;
